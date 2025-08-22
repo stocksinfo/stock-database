@@ -1,0 +1,33 @@
+# FastAPI and web server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# HTTP requests and data fetching
+requests==2.31.0
+httpx==0.25.1
+
+# Data processing
+pandas==2.1.3
+numpy==1.25.2
+
+# Configuration and environment
+python-dotenv==1.0.0
+pydantic==2.4.2
+
+# File handling
+aiofiles==23.2.1
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Development and debugging
+python-json-logger==2.0.7
+
+# Database (SQLite is built into Python)
+# No additional SQLite dependencies needed
+
+# Optional: For more advanced database operations
+# sqlalchemy==2.0.23  # Uncomment if you want to use SQLAlchemy ORM later
+# alembic==1.12.1     # Uncomment for database migrations
