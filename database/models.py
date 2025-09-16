@@ -447,7 +447,7 @@ def initialize_sample_data(db_manager: DatabaseManager):
 
 if __name__ == "__main__":
     # Test the database
-    print("🚀 Initializing SQLite Stock Database...")
+    print("Initializing SQLite Stock Database...")
     
     # Create database manager
     db = DatabaseManager("stock_database.db")

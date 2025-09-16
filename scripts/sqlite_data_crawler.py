@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.models import DatabaseManager, Stock, StockPrice, TechnicalIndicator
-from crawlers.yahoo_crawler import YahooFinanceCrawler
+from crawlers.web_crawler import YahooFinanceCrawler
 from datetime import datetime, timedelta
 import json
 import time
