@@ -1,2 +1,9 @@
 /test_area/
 /.venv/
+/config/fiscal/
+/config/missing_company_info.csv
+/database/1_info.json
+/database/APPL.xlsx
+/database/convert_database.py
+/database/models.py
+/database/test_database.sql

@@ -1,10 +1,10 @@
 import datetime
 import json
-
 import math
 import yfinance
 from math import isnan
 from numpy.ma.extras import average
+import pandas as pd
 
 
 class CompanyDataCollector:
@@ -68,7 +68,6 @@ class CompanyDataCollector:
         ]
         # Load existing information
         self.load_all_ticker_symbols()
-        # self.load_current_company_information()
         if not self.all_ticker_symbols:
             print(f'No Tickers found to be processed')
 
@@ -149,13 +148,13 @@ class CompanyDataCollector:
             else:
                 for ent_date, ent_row in data.iterrows():
                     date_data = {
-                        "Open" : ent_row["Open"],
-                        "High" : ent_row["High"],
-                        "Low" : ent_row["Low"],
-                        "Close" : ent_row["Close"],
-                        "Volume" : ent_row["Volume"]
+                        "Open" : round(ent_row["Open"],2),
+                        "High" : round(ent_row["High"],2),
+                        "Low" : round(ent_row["Low"],2),
+                        "Close" : round(ent_row["Close"],2),
+                        "Volume" : round(ent_row["Volume"],2)
                     }
-                    company_ts[ent_date.date().strftime("%Y-%m-%d")] = date_data
+                    company_ts[pd.to_datetime(ent_date).strftime('%Y-%m-%d')] = date_data
         except Exception as e:
             status = False
             print(f"- An unexpected error occurred for {ticker} in retrieving Company TS : {e}")
@@ -217,6 +216,7 @@ class CompanyDataCollector:
                 value = red_ts[key][tag]
                 if not isnan(value):
                     break
+        value = round(value, 2)
         return value
 
     @staticmethod
@@ -226,7 +226,9 @@ class CompanyDataCollector:
             for vkey in data[tkey].keys():
                 if not vkey in fin_data:
                     fin_data[vkey] = {}
-                fin_data[vkey][tkey.date().strftime("%Y-%m-%d")] = data[tkey][vkey]
+                if isnan(data[tkey][vkey]):
+                    data[tkey][vkey] = 0.0
+                fin_data[vkey][tkey.date().strftime("%Y-%m-%d")] = round(data[tkey][vkey],2)
         for vkey in fin_data.keys():
             data = fin_data[vkey]
             fin_data[vkey] = dict(sorted(data.items(), reverse=True))
@@ -273,6 +275,7 @@ class CompanyDataCollector:
                 value[1] = (cur_val-pre_val)/pre_val
         except Exception as e:
             print(f"RevG. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -292,6 +295,7 @@ class CompanyDataCollector:
                 value = self.get_rev_growth(infos, financials, timeseries)
         except Exception as e:
             print(f"ProftG. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -316,6 +320,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"EPS. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -338,6 +343,7 @@ class CompanyDataCollector:
                 value[0] = 0.0
         except Exception as e:
             print(f"A/L. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -371,6 +377,7 @@ class CompanyDataCollector:
             value[1] *= 100
         except Exception as e:
             print(f"D/E. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -409,6 +416,7 @@ class CompanyDataCollector:
                     value[1] = fcf[sorted(fcf.keys(), reverse=True)[0]]
         except Exception as e:
             print(f"FCF. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -451,6 +459,7 @@ class CompanyDataCollector:
                 break
         except Exception as e:
             print(f"P/E. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -498,6 +507,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"P/S. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -544,6 +554,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"P/B. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -578,12 +589,13 @@ class CompanyDataCollector:
                         tot_equity[year].append(financials["Stockholders Equity"][k])
             for k in sorted(tot_equity.keys(), reverse=True):
                 tot_e = math.fsum(tot_equity[k])
-                if tot_e != 0.0 or not isnan(tot_e):
+                if tot_e != 0.0 and not isnan(tot_e):
                     value[1] = math.fsum(tot_income[k])/tot_e
-                if value[1] != 0.0 or not isnan(value[1]):
+                if value[1] != 0.0 and not isnan(value[1]):
                     break
         except Exception as e:
             print(f"ROE. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -624,12 +636,13 @@ class CompanyDataCollector:
             for k in sorted(tot_div.keys(), reverse=True):
                 tot_d = math.fsum(tot_div[k])
                 tot_i = math.fsum(tot_income[k])
-                if tot_i != 0.0 or not isnan(tot_i) or not isnan(tot_d):
+                if tot_i != 0.0 and not isnan(tot_i) and not isnan(tot_d):
                     value[1] = tot_d/tot_i
-                    if value[1] != 0.0 or not isnan(value[1]):
+                    if value[1] != 0.0 and not isnan(value[1]):
                         break
         except Exception as e:
             print(f"DIV PAY. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -669,6 +682,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"CUR RAT. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -712,6 +726,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"DIVIDEND. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     '''
@@ -750,6 +765,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"EBITDA. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     def get_market_cap(self, infos, financials, timeseries):
@@ -779,6 +795,7 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"MAR CAP. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     def get_cash(self, infos, financials, timeseries):
@@ -805,6 +822,7 @@ class CompanyDataCollector:
                         break
         except Exception as e:
             print(f"TOT CASH. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
 
     @staticmethod
@@ -832,8 +850,8 @@ class CompanyDataCollector:
                     break
         except Exception as e:
             print(f"TOT CASH. Error in data {e}")
+        value = [round(value[0], 2), round(value[1], 2)]
         return value
-
 
     def update_rating_items(self, infos:dict, financials:dict, timeseries:dict):
         calc_values = {}
@@ -911,17 +929,3 @@ class CompanyDataCollector:
             #     break
         print(f'Ticker with no information {missing_tickers}')
 
-
-
-# Example usage
-def main():
-    # Create collector instance
-    collector = CompanyDataCollector("company_info.json", "ticker.json")
-    if collector.all_ticker_symbols:
-        collector.start_processing()
-    else:
-        print("No ticker symbols available")
-
-
-if __name__ == "__main__":
-    main()
