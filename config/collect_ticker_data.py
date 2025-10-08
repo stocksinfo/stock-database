@@ -234,6 +234,7 @@ class CompanyDataCollector:
             fin_data[vkey] = dict(sorted(data.items(), reverse=True))
         return fin_data
 
+
     @staticmethod
     def fetch_last_data(data:dict, items:int, as_dict:bool=False) -> list | dict:
         vals = {}
