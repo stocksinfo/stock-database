@@ -1,13 +1,23 @@
-import sys
 import os
+import sqlite3
 
 from config.source.basicStockData import BasicStockData
+from database.convert_database import DatabaseManager
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../config/source/")))
-import basicStockData
 
 class UpdateStockData(BasicStockData):
-    def __init__(self):
+    def __init__(self, db_file="company_info.db"):
         super().__init__()
 
 
+def main():
+    print("Looking for SQLite Stock Database...")
+    if os.path.exists("./company_info.db"):
+        db = UpdateStockData("company_info.db")
+    else:
+        print("File company_info.db doesn't exists, check for the database to update")
+
+    pass
+
+if __name__ == '__main__':
+    main()

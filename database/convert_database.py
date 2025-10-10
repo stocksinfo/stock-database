@@ -2,7 +2,10 @@ import json
 import re
 import sqlite3
 
+import math
 import yfinance
+import numpy as np
+from pandas.core.dtypes.inference import is_float
 
 
 class DatabaseManager:
@@ -55,51 +58,94 @@ class DatabaseManager:
             print(f"Error resetting database: {e}")
 
     def add_entry_to_database(self, ticker:str, table_name:str, table_data:dict):
-        """Add entry to database"""
+        """Add tables to database"""
         try:
-            conn = self.get_connection()
-            if table_name != self.time_table_name:
+            sql_queries = []
+            values = []
+            if table_name == self.info_table_name:
                 cols = []
                 vals = []
                 if table_name != self.info_table_name:
                     vals = [ticker,]
                     cols = ["symbol",]
+                # print(table_data)
                 for k in table_data.keys():
                     col = re.sub(r'[^A-Za-z0-9]', '', k)
                     col = re.sub(r'^[0-9]+', '', col)
                     cols.append(col)
-                    json_string = json.dumps(table_data[k])
-                    vals.append(json_string)
+                    vals.append(table_data[k])
                 if cols and vals:
                     columns = ', '.join(cols)
                     placeholders = ', '.join('?' * len(cols))
-                    values = tuple(vals)
-                    cursor = conn.cursor()
-                    sql_query = f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})'
-                    cursor.execute(sql_query, values)
-                    conn.commit()
-            else:
-                cols = ["symbol", "Date", "Value"]
+                    values.append(tuple(vals))
+                    sql_queries.append(f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})')
+            elif table_name == self.time_table_name:
                 for k in table_data.keys():
-                    vals = [ticker, k]
+                    cols = ["symbol", "Date"]
                     json_string = json.dumps(table_data[k])
-                    vals.append(json_string)
+                    daily_val = dict(json.loads(json_string))
+                    vals = [ticker, k]
+                    for dk in daily_val.keys():
+                        cols.append(re.sub(r'[^A-Za-z0-9]', '', dk))
+                        if is_float(daily_val[dk]):
+                            vals.append(float(daily_val[dk]))
+                        else:
+                            vals.append(str(daily_val[dk]))
                     columns = ', '.join(cols)
                     placeholders = ', '.join('?' * len(cols))
-                    values = tuple(vals)
-                    cursor = conn.cursor()
-                    sql_query = f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})'
-                    cursor.execute(sql_query, values)
+                    values.append(tuple(vals))
+                    sql_queries.append(f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})')
+            else:
+                cols = ["symbol", "Date"]
+                for k in table_data.keys():
+                    col = re.sub(r'[^A-Za-z0-9]', '', k)
+                    col = re.sub(r'^[0-9]+', '', col)
+                    cols.append(col)
+                dates = dict()
+                for k in table_data.keys():
+                    for dt in table_data[k].keys():
+                        if dt not in dates:
+                            dates[dt] = 1
+                for dt in sorted(dates.keys(), reverse=True):
+                    dval = f'{ticker};{dt}'
+                    for k in table_data.keys():
+                        val = ""
+                        if dt in table_data[k].keys():
+                            val = table_data[k][dt]
+                            if val == 'Nan':
+                                val = ""
+                        dval = f'{dval};{val}'
+                    values.append(dval)
+                new_values = []
+                for index in range(len(values)):
+                    values[index] = tuple(values[index].split(';'))
+                    total = 0.0
+                    for val in values[index][2:]:
+                        if val == '':
+                            val = 0.0
+                        total += float(val)
+                    if cols and total != 0.0:
+                        columns = ', '.join(cols)
+                        placeholders = ', '.join('?' * len(cols))
+                        sql_queries.append(f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})')
+                        new_values.append(tuple(values[index]))
+                values = new_values
+            if values:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                for index in range(len(values)):
+                    cursor.execute(sql_queries[index], tuple(values[index]))
                     conn.commit()
-            conn.close()
+                conn.close()
         except Exception as e:
-            print(f"Error adding entry to database {table_name} : {ticker} -> {e}")
+            print(f"Error adding entry to database {table_name} : {ticker} -> {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
         return
 
     def _create_company_info_table(self, conn):
         conn.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.info_table_name} (
-                symbol VARCHAR(15) PRIMARY KEY,
+                symbol VARCHAR(15),
+                Date VARCHAR(20) DEFAULT CURRENT_DATE,
                 googleticker TEXT,
                 longName TEXT,
                 shortName TEXT,
@@ -111,6 +157,7 @@ class DatabaseManager:
                 exchangeTimezoneShortName TEXT,
                 fullExchangeName TEXT,
                 market TEXT,
+                grossProfits DECIMAL(10,2),
                 currentPrice DECIMAL(10,2),
                 sharesOutstanding BIGINT,
                 marketCap BIGINT,
@@ -125,8 +172,7 @@ class DatabaseManager:
                 dividendRate DECIMAL(10,2),
                 currentRatio DECIMAL(10,2),
                 totalCash BIGINT,
-                volume BIGINT,
-                date VARCHAR(20) DEFAULT CURRENT_DATE
+                volume BIGINT
             );
         ''')
         return
@@ -134,49 +180,53 @@ class DatabaseManager:
     def _create_financial_table(self, conn):
         conn.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.fin_table_name} (
-                symbol VARCHAR(15) PRIMARY KEY,
-                BasicAverageShares TEXT,
-                EBIT TEXT,
-                EBITDA TEXT,
-                GrossProfit TEXT,
-                NetIncome TEXT,
-                DilutedEPS TEXT,
-                CashAndCashEquivalents TEXT,
-                TotalRevenue TEXT,
-                StockholdersEquity TEXT,
-                TotalAssets TEXT,
-                TotalDebt TEXT,
-                TotalEquityGrossMinorityInterest TEXT,
-                TotalLiabilitiesNetMinorityInterest TEXT,
-                CapitalExpenditure TEXT,
-                CashDividendsPaid TEXT,
-                FreeCashFlow TEXT,
-                OperatingCashFlow TEXT
-            );
+                symbol VARCHAR(15),
+                Date VARCHAR(20),
+                BasicAverageShares DECIMAL(10,4),
+                EBIT DECIMAL(10,4),
+                EBITDA DECIMAL(10,4),
+                GrossProfit DECIMAL(10,4),
+                NetIncome DECIMAL(10,4),
+                DilutedEPS DECIMAL(10,4),
+                CashAndCashEquivalents DECIMAL(10,4),
+                TotalRevenue DECIMAL(10,4),
+                StockholdersEquity DECIMAL(10,4),
+                TotalAssets DECIMAL(10,4),
+                TotalDebt DECIMAL(10,4),
+                TotalEquityGrossMinorityInterest DECIMAL(10,4),
+                TotalLiabilitiesNetMinorityInterest DECIMAL(10,4),
+                CapitalExpenditure DECIMAL(10,4),
+                CashDividendsPaid DECIMAL(10,4),
+                FreeCashFlow DECIMAL(10,4),
+                OperatingCashFlow DECIMAL(10,4),
+                PRIMARY KEY (symbol, Date)
+           );
         ''')
         pass
 
     def _create_ratings_table(self, conn):
         conn.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.rate_table_name} (
-                symbol VARCHAR(15) PRIMARY KEY,
-                RevenueGrowth TEXT,
-                ProfitGrowth TEXT,
-                EarningsPerShareEPS TEXT,
-                AssetsVsLiabilities TEXT,
-                DebttoEquityRatioDE TEXT,
-                FreeCashFlowFCF TEXT,
-                PricetoEarningsPERatio TEXT,
-                PricetoSalesPSRatio TEXT,
-                PricetoBookPBRatio TEXT,
-                ReturnonEquityROE TEXT,
-                DividendPayoutRatio TEXT,
-                CurrentRatio TEXT,
-                MarketCap TEXT,
-                PaidDividend TEXT,
-                TotalCash TEXT,
-                daysLowHigh TEXT,
-                EBITxx TEXT
+                symbol VARCHAR(15),
+                Date VARCHAR(20),
+                RevenueGrowth DECIMAL(10,4),
+                ProfitGrowth DECIMAL(10,4),
+                EarningsPerShareEPS DECIMAL(10,4),
+                AssetsVsLiabilities DECIMAL(10,4),
+                DebttoEquityRatioDE DECIMAL(10,4),
+                FreeCashFlowFCF DECIMAL(10,4),
+                PricetoEarningsPERatio DECIMAL(10,4),
+                PricetoSalesPSRatio DECIMAL(10,4),
+                PricetoBookPBRatio DECIMAL(10,4),
+                ReturnonEquityROE DECIMAL(10,4),
+                DividendPayoutRatio DECIMAL(10,4),
+                CurrentRatio DECIMAL(10,4),
+                MarketCap DECIMAL(10,4),
+                PaidDividend DECIMAL(10,4),
+                TotalCash DECIMAL(10,4),
+                daysLowHigh DECIMAL(10,4),
+                EBITxx  DECIMAL(10,4),
+                PRIMARY KEY (symbol, Date)
             );
         ''')
         pass
@@ -185,9 +235,20 @@ class DatabaseManager:
         conn.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.time_table_name} (
                 symbol VARCHAR(15) ,
-                Date TEXT,
-                Value TEXT,
-                PRIMARY KEY (Symbol, Date)
+                Date VARCHAR(20),
+                Open DECIMAL(5,2),
+                High DECIMAL(5,2),
+                Low DECIMAL(5,2),
+                Close DECIMAL(5,2),
+                Volume BIGINT,
+                YZVolatilityEstimator DECIMAL(10,4),
+                RelativeStrengthIndex DECIMAL(10,4),
+                BollingerBands TEXT,
+                AverageTrueRange TEXT,
+                MovingAverageConvergenceDivergence TEXT,
+                DollarVolume DECIMAL(10,4),
+                StochasticOscillator TEXT,
+                PRIMARY KEY (symbol, Date)
             );
         ''')
         pass
@@ -204,14 +265,12 @@ def main():
         db.reset_database()
         db.init_database()
 
-    for ticker in company_info.keys():
+    for ticker in sorted(company_info.keys()):
         print(f'Adding {ticker} to the database...')
         for entry in company_info[ticker].keys():
             db.add_entry_to_database(ticker, entry, company_info[ticker][entry])
 
-
 main()
-
 
 
 
