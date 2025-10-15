@@ -1,6 +1,5 @@
 import datetime
-from datetime import timedelta
-from dateutil.relativedelta import relativedelta
+import pprint
 import pandas as pd
 import yfinance
 from math import isnan
@@ -39,23 +38,23 @@ class CollectYFinanceData:
             "volume"
             ]
         self.financials_keys = [
-            "Basic Average Shares",
+            "BasicAverageShares",
             "EBIT",
             "EBITDA",
-            "Gross Profit",
-            "Net Income",
-            "Diluted EPS",
-            "Cash And Cash Equivalents",
-            "Total Revenue",
-            "Stockholders Equity",
-            "Total Assets",
-            "Total Debt",
-            "Total Equity Gross Minority Interest",
-            "Total Liabilities Net Minority Interest",
-            "Capital Expenditure",
-            "Cash Dividends Paid",
-            "Free Cash Flow",
-            "Operating Cash Flow"
+            "GrossProfit",
+            "NetIncome",
+            "DilutedEPS",
+            "CashAndCashEquivalents",
+            "TotalRevenue",
+            "StockholdersEquity",
+            "TotalAssets",
+            "TotalDebt",
+            "TotalEquityGrossMinorityInterest",
+            "TotalLiabilitiesNetMinorityInterest",
+            "CapitalExpenditure",
+            "CashDividendsPaid",
+            "FreeCashFlow",
+            "OperatingCashFlow"
         ]
         self.ticker_obj = None
 
@@ -81,7 +80,7 @@ class CollectYFinanceData:
             if date_tags:
                 to_fill = {}
                 for k in date_tags:
-                    to_fill[k] = "Nan"
+                    to_fill[k] = 0.0
                 for key in new_data.keys():
                     if not new_data[key]:
                         new_data[key] = to_fill
@@ -92,11 +91,12 @@ class CollectYFinanceData:
         fin_data = {}
         for tkey in data.keys():
             for vkey in data[tkey].keys():
-                if not vkey in fin_data:
-                    fin_data[vkey] = {}
+                date_str = vkey.strftime('%Y-%m-%d')
+                if not tkey in fin_data:
+                    fin_data[tkey] = {}
                 if isnan(data[tkey][vkey]):
                     data[tkey][vkey] = 0.0
-                fin_data[vkey][tkey.date().strftime("%Y-%m-%d")] = round(data[tkey][vkey],2)
+                fin_data[tkey][date_str] = round(data[tkey][vkey],2)
         for vkey in fin_data.keys():
             data = fin_data[vkey]
             fin_data[vkey] = dict(sorted(data.items(), reverse=True))
@@ -111,23 +111,17 @@ class CollectYFinanceData:
             if not company_info:
                 raise Exception("Can't retrieve Company Information")
             else:
-                # if "google_ticker" not in company_info:
-                #     company_info["google_ticker"] = self.all_ticker_symbols[ticker]
                 company_info = self.update_data_keys(company_info, 1)
         except Exception as e:
             status = False
             print(f"- Info Error for {ticker}: {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
         return [status, company_info]
 
-    def get_company_timeseries(self, ticker: str) :
-        # print(f"+ Getting Company Timeseries for {ticker}")
+    def get_company_timeseries(self, ticker: str, str_date: str, end_date: str) :
         company_ts = {}
         status = True
         try:
             self.ticker_obj = yfinance.Ticker(ticker)
-            tdy = datetime.datetime.today()
-            str_date = (tdy - timedelta(days=1) - relativedelta(years=2)).strftime('%Y-%m-%d')
-            end_date = (tdy - timedelta(days=1)).strftime('%Y-%m-%d')
             data = self.ticker_obj.history(start=str_date, end=end_date,
                                            interval='1d', actions=False, auto_adjust=False)
             if data.empty:
@@ -151,41 +145,61 @@ class CollectYFinanceData:
         return [status, company_ts]
 
     def get_company_financials(self, ticker: str) :
-        company_fin = {}
         status = True
+        company_fin = {}
         try:
-            self.ticker_obj = yfinance.Ticker(ticker)
-            """
-            Financial Results
-            """
-            data = self.ticker_obj.get_financials(as_dict=True, pretty=True, freq="yearly")
-            data_q = self.ticker_obj.get_financials(as_dict=True, pretty=True, freq="quarterly")
-            data.update(data_q)
-            if data:
-                company_fin.update(self.dataframe_to_dict(data))
-            """
-            Balance Sheet  Results
-            """
-            data = self.ticker_obj.get_balance_sheet(as_dict=True, pretty=True, freq="yearly")
-            data_q = self.ticker_obj.get_balance_sheet(as_dict=True, pretty=True, freq="quarterly")
-            data.update(data_q)
-            if data:
-                company_fin.update(self.dataframe_to_dict(data))
-            """
-            Cash Flow Results
-            """
-            data = self.ticker_obj.get_cash_flow(as_dict=True, pretty=True, freq="yearly")
-            data_q = self.ticker_obj.get_cash_flow(as_dict=True, pretty=True, freq="quarterly")
-            data.update(data_q)
-            if data:
-                company_fin.update(self.dataframe_to_dict(data))
-            # pprint.pprint(company_fin)
+            company_fin = self.fetch_financials(ticker, ["yearly", "quarterly"])
+            if not company_fin:
+                raise Exception("Can't retrieve Company Financials")
             company_fin = self.update_data_keys(company_fin, 2)
             if not company_fin:
                 raise Exception("Missing needed keys")
         except Exception as e:
             status = False
             print(f"- Financial Error for {ticker}: {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
-
         return [status, company_fin]
+
+    def fetch_latest_financials(self, ticker: str):
+        self.ticker_obj = yfinance.Ticker(ticker)
+        datas = []
+        freqs = ["quarterly", "yearly"]
+        for freq in freqs:
+            datas.append(self.ticker_obj.get_financials(freq=freq))
+            datas.append(self.ticker_obj.get_balance_sheet(freq=freq))
+            datas.append(self.ticker_obj.get_cash_flow(freq=freq))
+        data = pd.concat(datas, axis=1).fillna(0)
+        data = data.iloc[:, 0:1]
+        data = data.T.groupby(by=data.columns).agg(self.non_zero_agg).T
+        date = pd.Timestamp(data.columns[0]).strftime('%Y-%m-%d')
+        date = datetime.datetime.strptime(date, '%Y-%m-%d')
+        data = data.to_dict(orient='index')
+        data = self.dataframe_to_dict(data)
+        return [date, data]
+
+    @staticmethod
+    def non_zero_agg(series):
+        non_zero_mask = (series != 0) & (series.notna())
+        if non_zero_mask.any():
+            return series[non_zero_mask].iloc[0]
+        else:
+            return 0
+
+    def fetch_financials(self, ticker: str, freqs: list) -> dict :
+        data = {}
+        try:
+            self.ticker_obj = yfinance.Ticker(ticker)
+            data_t = []
+            for freq in freqs:
+                data_t.append(self.ticker_obj.get_financials(freq=freq))
+                data_t.append(self.ticker_obj.get_balance_sheet(freq=freq))
+                data_t.append(self.ticker_obj.get_cash_flow(freq=freq))
+            if data_t:
+                data = pd.concat(data_t, axis=1).fillna(0)
+                data = data.T.groupby(by=data.columns).agg(self.non_zero_agg).T
+                data = data.to_dict(orient='index')
+                data = self.dataframe_to_dict(data)
+        except Exception as e:
+            print(f"- Financial Error for {ticker}: {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
+        # pprint.pprint(data)
+        return data
 

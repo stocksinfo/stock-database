@@ -1,6 +1,8 @@
 import json
+import pprint
 import re
 import sqlite3
+from datetime import datetime
 
 import math
 import yfinance
@@ -15,8 +17,6 @@ class DatabaseManager:
         self.fin_table_name = "financials"
         self.rate_table_name = "ratings"
         self.time_table_name = "timeseries"
-
-
 
     def get_connection(self):
         """Get database connection with foreign key support"""
@@ -66,14 +66,11 @@ class DatabaseManager:
                 cols = []
                 vals = []
                 if table_name != self.info_table_name:
-                    vals = [ticker,]
-                    cols = ["symbol",]
-                # print(table_data)
-                for k in table_data.keys():
-                    col = re.sub(r'[^A-Za-z0-9]', '', k)
-                    col = re.sub(r'^[0-9]+', '', col)
+                    vals = [ticker, datetime.today().strftime("%Y-%m-%d")]
+                    cols = ["symbol","Date"]
+                for col in table_data.keys():
                     cols.append(col)
-                    vals.append(table_data[k])
+                    vals.append(table_data[col])
                 if cols and vals:
                     columns = ', '.join(cols)
                     placeholders = ', '.join('?' * len(cols))
@@ -97,9 +94,7 @@ class DatabaseManager:
                     sql_queries.append(f'INSERT INTO {table_name} ({columns}) VALUES ({placeholders})')
             else:
                 cols = ["symbol", "Date"]
-                for k in table_data.keys():
-                    col = re.sub(r'[^A-Za-z0-9]', '', k)
-                    col = re.sub(r'^[0-9]+', '', col)
+                for col in table_data.keys():
                     cols.append(col)
                 dates = dict()
                 for k in table_data.keys():
@@ -113,7 +108,7 @@ class DatabaseManager:
                         if dt in table_data[k].keys():
                             val = table_data[k][dt]
                             if val == 'Nan':
-                                val = ""
+                                val = 0.0
                         dval = f'{dval};{val}'
                     values.append(dval)
                 new_values = []
@@ -252,27 +247,4 @@ class DatabaseManager:
             );
         ''')
         pass
-
-
-def main():
-    print("Initializing SQLite Stock Database...")
-    db = DatabaseManager("company_info.db")
-
-    company_info = {}
-    # Reading the json file
-    with open("../config/company_info.json", "r") as f:
-        company_info = json.load(f)
-        db.reset_database()
-        db.init_database()
-
-    for ticker in sorted(company_info.keys()):
-        print(f'Adding {ticker} to the database...')
-        for entry in company_info[ticker].keys():
-            db.add_entry_to_database(ticker, entry, company_info[ticker][entry])
-
-main()
-
-
-
-
 
