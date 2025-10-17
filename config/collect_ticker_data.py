@@ -50,8 +50,9 @@ class CompanyDataCollector:
         status, data = bsd.get_company_info(ticker)
         if status:
             companies_data[ticker] = {}
-            if not data["googleticker"]:
+            if not 'googleticker' in data:
                 data["googleticker"] = self.all_ticker_symbols[ticker]
+            data["googleticker"] = self.all_ticker_symbols[ticker]
             companies_data[ticker]["info"] = data
             tdy = datetime.datetime.today()
             start_date = (tdy - timedelta(days=1) - relativedelta(years=2)).strftime('%Y-%m-%d')
@@ -72,8 +73,8 @@ class CompanyDataCollector:
     def start_processing(self):
         missing_tickers = []
         counter = 1
+        self.load_current_company_information()
         for ticker in self.all_ticker_symbols.keys():
-            self.load_current_company_information()
             to_update = False
             if ticker in self.company_info:
                 if "info" not in self.company_info[ticker]:

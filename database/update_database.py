@@ -1,8 +1,5 @@
 import datetime
-import os
-import re
 import sqlite3
-import time
 from datetime import timedelta
 
 from config.source.basicStockData import BasicStockData
@@ -14,7 +11,8 @@ class UpdateStockData(BasicStockData):
         super().__init__()
         self.db_file = db_file
         self.db_manager = DatabaseManager(self.db_file)
-        self.fin_updated = False
+        self.current_ts = None
+
 
     def get_connection(self):
         """Get database connection with foreign key support"""
@@ -22,30 +20,6 @@ class UpdateStockData(BasicStockData):
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row  # Enable dict-like access
         return conn
-
-    @staticmethod
-    def get_timeseries_entry(timeseries: dict, date_key: str, tag: str) -> float:
-        value = 0.0
-        # if date_key in timeseries:
-        #     value = timeseries[date_key][tag]
-        # else:
-        #     last_date = sorted(timeseries.keys())[0]
-        #     last_date = datetime.datetime.strptime(last_date, "%Y-%m-%d")
-        #     ask_date = datetime.datetime.strptime(date_key, "%Y-%m-%d")
-        #     if ask_date < last_date:
-        #         value = timeseries[last_date.strftime("%Y-%m-%d")][tag]
-        #     else:
-        #         k = "-".join(date_key.split("-")[:-1])
-        #         red_ts = {}
-        #         for key in timeseries.keys():
-        #             if k in key:
-        #                 red_ts[key] = timeseries[key]
-        #         for key in sorted(red_ts.keys(), reverse=True):
-        #             value = red_ts[key][tag]
-        #             if not isnan(value):
-        #                 break
-        value = round(value, 2)
-        return value
 
     @staticmethod
     def fetch_and_convert(query, cursor, as_list=False):
@@ -58,25 +32,11 @@ class UpdateStockData(BasicStockData):
                 output.append(dict(row))
         return output
 
-    def check_and_update(self, ticker:str, table_name:str, cursor, conn):
-        try:
-            # print(f'Updating {table_name} from {ticker}')
-            if table_name == self.db_manager.info_table_name:
-                self.refresh_info_table(table_name, ticker, cursor, conn)
-            if table_name == self.db_manager.fin_table_name:
-                self.refresh_fin_table(table_name, ticker, cursor, conn)
-            if table_name == self.db_manager.time_table_name:
-                self.refresh_tim_table(table_name, ticker, cursor, conn)
-            if table_name == self.db_manager.rate_table_name:
-                self.refresh_rat_table(table_name, ticker, cursor, conn)
-                exit(20)
-        except Exception as e:
-            print(f"Error : {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
-
     def refresh_info_table(self, table_name, ticker:str, cursor, conn):
         try:
             sql_query = f"SELECT Date FROM {table_name} WHERE symbol='{ticker}';"
             info_date = self.fetch_and_convert(sql_query, cursor, as_list=True)
+            # print(sql_query, info_date)
             if info_date:
                 info_date = datetime.datetime.strptime(sorted(info_date, reverse=True)[0], '%Y-%m-%d')
                 end_date = datetime.datetime.today()
@@ -114,12 +74,9 @@ class UpdateStockData(BasicStockData):
                 fin_date = datetime.datetime.strptime(sorted(fin_date, reverse=True)[0], '%Y-%m-%d')
                 end_date, financials = self.fetch_latest_financials(ticker)
                 if fin_date.date() < end_date.date():
-                    self.fin_updated = True
                     financials = self.update_data_keys(financials, 2)
                     self.db_manager.add_entry_to_database(ticker, table_name, financials)
                     print(f'+ {ticker}/{str(table_name).upper()}: Adding entries from {fin_date.strftime("%Y-%m-%d")}')
-                else:
-                    self.fin_updated = False
         except Exception as e:
             print(f"Error adding entry to database {table_name} : {ticker} -> {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
             conn.rollback()
@@ -128,16 +85,27 @@ class UpdateStockData(BasicStockData):
     @staticmethod
     def sql_to_dict(data:list) -> dict:
         output = {}
+        # print(data)
         for entry in data:
-            if 'googleticker' in entry: #info table
+            if 'googleticker' in entry.keys(): #info table
                 output = entry
+            elif 'YZVolatilityEstimator' in entry.keys(): #timeseries
+                # print(entry)
+                cur_date = None
+                for key in entry.keys():
+                    if key == 'Date':
+                        cur_date = entry[key]
+                    elif key != 'symbol':
+                        if cur_date not in output:
+                            output[cur_date] = {}
+                        output[cur_date][key] = entry[key]
             else: # finance table
                 cur_date = None
                 for key in entry.keys():
                     if key == 'Date':
                         cur_date = entry[key]
                     elif key != 'symbol':
-                        entry_name = re.sub('([a-z])([A-Z])', r'\1 \2', key)
+                        entry_name = key
                         if entry_name not in output:
                             output[entry_name] = {}
                         if not entry[key]:
@@ -145,15 +113,62 @@ class UpdateStockData(BasicStockData):
                         output[entry_name][cur_date] = entry[key]
         return output
 
+    @staticmethod
+    def dict_to_sql(ticker: str, data:dict) -> list:
+        output = []
+        if 'googleticker' in data.keys():
+            data['Date'] = datetime.datetime.today().strftime("%Y-%m-%d")
+            output.append(data)
+        elif 'BasicAverageShares' in data.keys() or 'RevenueGrowth' in data.keys():
+            all_data = {}
+            for key in data.keys():
+                for date_key in data[key].keys():
+                    if date_key not in all_data:
+                        all_data[date_key] = {
+                            'symbol': ticker,
+                            'Date': date_key,
+                        }
+                    all_data[date_key][key] = data[key][date_key]
+            output = list(all_data.values())
+        else: # timeseries
+            for date_key in data.keys():
+                line = {
+                    'symbol': ticker,
+                    'Date': date_key,
+                }
+                for key in data[date_key].keys():
+                    line[key] = data[date_key][key]
+                output.append(line)
+        return output
+
     def refresh_rat_table(self, table_name, ticker:str, cursor, conn):
         try:
             sql_query = f"SELECT * FROM {self.db_manager.info_table_name} WHERE symbol='{ticker}';"
-            info_data = self.fetch_and_convert(sql_query, cursor)
-            info_data = self.sql_to_dict(info_data)
+            info_data = self.sql_to_dict(self.fetch_and_convert(sql_query, cursor))
             sql_query = f"SELECT * FROM {self.db_manager.fin_table_name} WHERE symbol='{ticker}' ORDER BY Date ASC;"
-            fin_data = self.fetch_and_convert(sql_query, cursor)
-            fin_data = self.sql_to_dict(fin_data)
-            # rat_data = self.update_rating_items(info_data, fin_data, {})
+            fin_data = self.sql_to_dict(self.fetch_and_convert(sql_query, cursor))
+            sql_query = f"SELECT * FROM {self.db_manager.time_table_name} WHERE symbol='{ticker}' ORDER BY Date ASC;"
+            ts_data = self.sql_to_dict(self.fetch_and_convert(sql_query, cursor))
+            sql_query = f"SELECT Date FROM {self.db_manager.rate_table_name} WHERE symbol='{ticker}' ORDER BY Date ASC;"
+            rat_dates = sorted(self.fetch_and_convert(sql_query, cursor, as_list=True), reverse=True)
+            rat_data = self.update_rating_items(info_data, fin_data, ts_data)
+            entries = self.dict_to_sql(ticker, rat_data)
+            sql_to_enter = []
+            for entry in entries:
+                if 'Date' in entry.keys():
+                    if entry['Date'] == 'today':
+                        sql_query = f"DELETE FROM {table_name} WHERE symbol = '{ticker}' AND Date = 'today';"
+                        cursor.execute(sql_query)
+                        conn.commit()
+                        sql_to_enter.append(entry)
+                    else:
+                        cur_date = entry['Date']
+                        if cur_date not in rat_dates:
+                            sql_to_enter.append(entry)
+            # print(sql_to_enter)
+            if sql_to_enter:
+                print(f'+ {ticker}/{str(table_name).upper()}: Updating with {len(sql_to_enter)} entries')
+                self.db_manager.add_entry_to_database(ticker, table_name, self.sql_to_dict(sql_to_enter))
         except Exception as e:
             print(f"Error adding entry to database {table_name} : {ticker} -> {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
             conn.rollback()
@@ -175,40 +190,42 @@ class UpdateStockData(BasicStockData):
                         data = self.update_ts_indicators(data)
                         # print(data)
                         timeseries = {}
+                        items_to_remove = 0
                         for date_key in data.keys():
                             date = datetime.datetime.strptime(date_key, '%Y-%m-%d')
                             if date.date() > ts_date.date():
                                 timeseries[date_key] = data[date_key]
                                 print(f'+ {ticker}/{str(table_name).upper()}: Adding entry into {ticker} -> {date_key}')
+                                items_to_remove += 1
                         self.db_manager.add_entry_to_database(ticker, table_name, timeseries)
+                        if items_to_remove > 0:
+                            sql_query = f"SELECT Date FROM {table_name} WHERE symbol='{ticker}';"
+                            all_dates = self.fetch_and_convert(sql_query, cursor, as_list=True)
+                            all_dates = sorted(all_dates)[:items_to_remove]
+                            or_logic = ""
+                            for date in all_dates:
+                                or_logic += f"Date = '{date}' OR "
+                            or_logic = or_logic[:-4]
+                            sql_query = f"DELETE FROM {table_name} WHERE symbol = '{ticker}' AND ({or_logic});"
+                            cursor.execute(sql_query)
+                            conn.commit()
+
         except Exception as e:
             print(f"Error adding entry to database {table_name} : {ticker} -> {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
             conn.rollback()
         return
 
-
-def main():
-    print("Looking for SQLite Stock Database...")
-    if os.path.exists("./company_info.db"):
-        db = UpdateStockData("company_info.db")
+    def check_and_update(self, ticker:str, table_name:str, cursor, conn):
         try:
-            conn = db.get_connection()
-            cursor = conn.cursor()
-            sql_query = f'SELECT name FROM sqlite_master WHERE type=\'table\' ORDER BY name;'
-            tables = [db.db_manager.info_table_name, db.db_manager.fin_table_name,
-                      db.db_manager.time_table_name, db.db_manager.rate_table_name]
-            sql_query = f'SELECT DISTINCT symbol FROM info;'
-            tickers = db.fetch_and_convert(sql_query, cursor, as_list=True)
-            start_time = time.perf_counter()
-            for ticker in tickers:
-                for table in tables:
-                    db.check_and_update(ticker, table, cursor, conn)
-            print("Time taken: {:.2f} seconds".format(time.perf_counter() - start_time))
+            # print(f'Updating {table_name} from {ticker}')
+            if table_name == self.db_manager.info_table_name:
+                self.refresh_info_table(table_name, ticker, cursor, conn)
+            if table_name == self.db_manager.fin_table_name:
+                self.refresh_fin_table(table_name, ticker, cursor, conn)
+            if table_name == self.db_manager.time_table_name:
+                self.refresh_tim_table(table_name, ticker, cursor, conn)
+            if table_name == self.db_manager.rate_table_name:
+                self.refresh_rat_table(table_name, ticker, cursor, conn)
         except Exception as e:
             print(f"Error : {e.__class__.__name__} {str(e)} at Line: {e.__traceback__.tb_lineno}")
-    else:
-        print("File company_info.db doesn't exists, check for the database to update")
 
-
-if __name__ == '__main__':
-    main()

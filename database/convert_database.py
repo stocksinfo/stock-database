@@ -63,11 +63,8 @@ class DatabaseManager:
             sql_queries = []
             values = []
             if table_name == self.info_table_name:
-                cols = []
-                vals = []
-                if table_name != self.info_table_name:
-                    vals = [ticker, datetime.today().strftime("%Y-%m-%d")]
-                    cols = ["symbol","Date"]
+                vals = [ticker, datetime.today().strftime("%Y-%m-%d")]
+                cols = ["symbol","Date"]
                 for col in table_data.keys():
                     cols.append(col)
                     vals.append(table_data[col])
@@ -140,7 +137,7 @@ class DatabaseManager:
         conn.execute(f'''
             CREATE TABLE IF NOT EXISTS {self.info_table_name} (
                 symbol VARCHAR(15),
-                Date VARCHAR(20) DEFAULT CURRENT_DATE,
+                Date VARCHAR(20),
                 googleticker TEXT,
                 longName TEXT,
                 shortName TEXT,

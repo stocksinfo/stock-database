@@ -9,7 +9,7 @@ class CollectYFinanceData:
     def __init__(self):
         self.info_keys = [
             "symbol",
-            "google_ticker",
+            "googleticker",
             "longName",
             "shortName",
             "country",

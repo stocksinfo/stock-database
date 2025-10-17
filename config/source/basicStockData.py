@@ -1,12 +1,11 @@
+import datetime
+import os
+import sys
+
 import numpy as np
 from math import isnan
-import os, sys
-import datetime
 
-from numpy.ma.extras import average
-
-sys.path.append(os.path.dirname(__file__))
-from get_yfinance_data import CollectYFinanceData
+from config.source.get_yfinance_data import CollectYFinanceData
 
 
 class BasicStockData(CollectYFinanceData):
@@ -265,7 +264,7 @@ class BasicStockData(CollectYFinanceData):
     def get_rev_growth(infos: dict, financials: dict, timeseries: dict) -> dict:
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["revenueGrowth"]
             if not data:
                 value[dt] = 0.0
@@ -295,7 +294,7 @@ class BasicStockData(CollectYFinanceData):
     def get_profit_growth(self, infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             pre_val = 0.0
             data = infos["grossProfits"]
             if not data:
@@ -331,7 +330,7 @@ class BasicStockData(CollectYFinanceData):
     def get_eps(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["trailingEps"]
             if not data:
                 value[dt] = 0.0
@@ -383,7 +382,7 @@ class BasicStockData(CollectYFinanceData):
     def get_de_ratio(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["debtToEquity"]
             if not data:
                 value[dt] = 0.0
@@ -412,7 +411,7 @@ class BasicStockData(CollectYFinanceData):
     def get_fcf(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["freeCashflow"]
             if not data:
                 value[dt] = 0.0
@@ -448,7 +447,7 @@ class BasicStockData(CollectYFinanceData):
     def get_pe_ratio(self, infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             eps = infos["trailingEps"]
             if not eps:
                 eps = 0.0
@@ -487,7 +486,7 @@ class BasicStockData(CollectYFinanceData):
     def get_ps_ratio(self, infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["priceToSalesTrailing12Months"]
             if not data:
                 value[dt] = 0.0
@@ -526,7 +525,7 @@ class BasicStockData(CollectYFinanceData):
     def get_pb_ratio(self, infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["priceToBook"]
             if not data:
                 value[dt] = 0.0
@@ -565,7 +564,7 @@ class BasicStockData(CollectYFinanceData):
     def get_roe(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["returnOnEquity"]
             if not data:
                 value[dt] = 0.0
@@ -597,7 +596,7 @@ class BasicStockData(CollectYFinanceData):
     def get_div_payout(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             divr = infos["dividendRate"]
             if not divr:
                 divr = 0.0
@@ -636,7 +635,7 @@ class BasicStockData(CollectYFinanceData):
     def get_cur_ratio(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["currentRatio"]
             if not data:
                 value[dt] = 0.0
@@ -665,7 +664,7 @@ class BasicStockData(CollectYFinanceData):
     def get_div(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["dividendRate"]
             if not data:
                 value[dt] = 0.0
@@ -693,7 +692,7 @@ class BasicStockData(CollectYFinanceData):
     def get_ebitda(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["ebitda"]
             if not data:
                 value[dt] = 0.0
@@ -714,7 +713,7 @@ class BasicStockData(CollectYFinanceData):
     def get_market_cap(self, infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["marketCap"]
             if not data:
                 value[dt] = 0.0
@@ -739,7 +738,7 @@ class BasicStockData(CollectYFinanceData):
     def get_cash(infos, financials, timeseries):
         value = {}
         try:
-            dt = datetime.datetime.today().strftime("%Y-%m-%d")
+            dt = 'today'
             data = infos["totalCash"]
             if not data:
                 value[dt] = 0.0
